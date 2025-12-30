@@ -5,7 +5,9 @@ use anyhow::Result;
 
 pub async fn run_init(fix: bool) -> Result<()> {
     if fix {
-        unimplemented!();
+        println!("Fixing/updating configuration files...");
+    } else {
+        println!("Initializing dotfiles...");
     }
 
     let config_path = create_config_dir().await?;
