@@ -27,7 +27,6 @@ pub async fn run_agent(
     }
 
     println!();
-    println!();
 
     // Load agent config
     let config_body = load_config(config.to_string()).await?;
@@ -40,7 +39,7 @@ pub async fn run_agent(
         // Try to load existing session, or create a new one if it doesn't exist
         let session = if full_path.exists() {
             println!(
-                "Loading existing session: {}\n\n",
+                "Loading session: {}\n",
                 session_name.to_string().green().bold()
             );
             load_session(session_name)
@@ -48,7 +47,7 @@ pub async fn run_agent(
                 .with_context(|| anyhow::anyhow!("Failed to load session"))?
         } else {
             println!(
-                "Creating new session: {}\n\n",
+                "Creating session: {}\n",
                 session_name.to_string().green().bold()
             );
             Session::new(session_name, config, session_path)

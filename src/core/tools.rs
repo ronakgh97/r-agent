@@ -13,6 +13,9 @@ pub fn get_default_toolset() -> ToolRegistry {
     registry.register(LsTool);
     registry.register(ReadFileTool);
     registry.register(TimeTool);
+    registry.register(RgTool);
+    registry.register(PwdTool);
+    registry.register(GitDiffTool);
 
     registry
 }
@@ -171,6 +174,161 @@ impl Tool for ReadFileTool {
                 let err_msg = "Failed to execute read file command".to_string();
                 Ok(err_msg)
             }
+        }
+    }
+}
+
+pub struct RgTool;
+
+#[async_trait::async_trait]
+impl Tool for RgTool {
+    fn name(&self) -> &str {
+        "ripgrep_tool"
+    }
+
+    fn description(&self) -> Value {
+        serde_json::json!({
+            "type": "function",
+            "function": {
+                "name": self.name(),
+                "description": "Search text using ripgrep",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "pattern": {
+                            "type": "string",
+                            "description": "Text or regex to search for"
+                        },
+                        "path": {
+                            "type": "string",
+                            "description": "Optional path to search in"
+                        }
+                    },
+                    "required": ["pattern"]
+                }
+            }
+        })
+    }
+
+    fn tool_callback(&self) -> bool {
+        true
+    }
+
+    async fn execute_tool(&self, args: Value) -> Result<String> {
+        let pattern = args["pattern"].as_str().unwrap();
+        let path = args["path"].as_str();
+
+        let mut cmd = Command::new("rg");
+        cmd.arg(pattern);
+
+        if let Some(p) = path {
+            cmd.arg(p);
+        }
+
+        let output = cmd.output().await?;
+
+        if output.status.success() {
+            let result = String::from_utf8_lossy(&output.stdout).to_string();
+            println!(
+                "{}",
+                format!(
+                    "[DEBUG] RgTool executed\nSearching for pattern: {}\n[Returning] \n{}\n",
+                    pattern, result
+                )
+                .dimmed()
+            );
+            Ok(result)
+        } else {
+            let err_msg = String::from_utf8_lossy(&output.stderr).to_string();
+            Ok(err_msg)
+        }
+    }
+}
+
+pub struct PwdTool;
+
+#[async_trait::async_trait]
+impl Tool for PwdTool {
+    fn name(&self) -> &str {
+        "print_working_directory_tool"
+    }
+
+    fn description(&self) -> Value {
+        serde_json::json!({
+            "type": "function",
+            "function": {
+                "name": self.name(),
+                "description": "Prints the current working directory",
+                "parameters": {
+                    "type": "object",
+                    "properties": {},
+                    "required": []
+                }
+            }
+        })
+    }
+
+    fn tool_callback(&self) -> bool {
+        true
+    }
+
+    async fn execute_tool(&self, _args: Value) -> Result<String> {
+        let output = Command::new("pwd").output().await?;
+
+        if output.status.success() {
+            let result = String::from_utf8_lossy(&output.stdout).to_string();
+            println!(
+                "{}",
+                format!("[DEBUG] PwdTool executed\n[Returning] \n{}\n", result).dimmed()
+            );
+            Ok(result)
+        } else {
+            let err_msg = String::from_utf8_lossy(&output.stderr).to_string();
+            Ok(err_msg)
+        }
+    }
+}
+
+pub struct GitDiffTool;
+
+#[async_trait::async_trait]
+impl Tool for GitDiffTool {
+    fn name(&self) -> &str {
+        "git_diff_tool"
+    }
+
+    fn description(&self) -> Value {
+        serde_json::json!({
+            "type": "function",
+            "function": {
+                "name": self.name(),
+                "description": "Shows git diff for the current repository",
+                "parameters": {
+                    "type": "object",
+                    "properties": {},
+                    "required": []
+                }
+            }
+        })
+    }
+
+    fn tool_callback(&self) -> bool {
+        true
+    }
+
+    async fn execute_tool(&self, _args: Value) -> Result<String> {
+        let output = Command::new("git").args(["diff"]).output().await?;
+
+        if output.status.success() {
+            let result = String::from_utf8_lossy(&output.stdout).to_string();
+            println!(
+                "{}",
+                format!("[DEBUG] GitDiffTool executed\n[Returning] \n{}\n", result).dimmed()
+            );
+            Ok(result)
+        } else {
+            let err_msg = String::from_utf8_lossy(&output.stderr).to_string();
+            Ok(err_msg)
         }
     }
 }
