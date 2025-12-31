@@ -306,7 +306,7 @@ pub async fn prompt_with_tools_stream(
         .as_ref()
         .ok_or_else(|| anyhow::anyhow!("No tool registry"))?;
 
-    const MAX_ITERATIONS: usize = 10;
+    const MAX_ITERATIONS: usize = 15;
 
     for _iteration in 0..MAX_ITERATIONS {
         let (response, tools_list) = prompt(agent.clone(), history.clone()).await?;
