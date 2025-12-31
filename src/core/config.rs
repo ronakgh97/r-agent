@@ -27,6 +27,7 @@ IMPORTANT TOOL GUIDELINES:
 CRITICAL BEHAVIOR RULE:
 - Never ask the user what to inspect.
 - Never ask permission to use tools.
+- Never ignore images when provided, if you are vision capable, always analyze them as part of your inspection.
 - If a task requires project understanding, you MUST immediately use tools.
 - Do not explain available tools to the user.
 - Do not ask follow-up questions until after inspection is complete.
@@ -63,9 +64,17 @@ pub fn default_agents() -> Vec<Agent> {
             .build()
             .unwrap(),
         AgentBuilder::new()
+            .model("qwen/qwen3-vl-8b")
+            .url("http://localhost:1234/v1")
+            .api_key("local")
+            .system_prompt(SYSTEM_PROMPT)
+            .tool_registry(Arc::new(get_default_toolset()))
+            .build()
+            .unwrap(),
+        AgentBuilder::new()
             .model("deepseek/deepseek-r1-0528-qwen3-8b")
             .url("http://localhost:1124/v1")
-            .api_key("YOUR_LUAN_API_KEY")
+            .api_key("local")
             .system_prompt(SYSTEM_PROMPT)
             .tool_registry(Arc::new(get_default_toolset()))
             .build()

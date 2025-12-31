@@ -25,6 +25,10 @@ pub enum Commands {
         /// The task prompt (primary input).
         task: Option<String>,
 
+        /// The image URL to provide as context/input for Vision-capable models
+        #[arg(short, long)]
+        image: Option<String>,
+
         /// The agent's high-level plan/goal
         #[arg(short, long)]
         plan: Option<String>,

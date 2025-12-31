@@ -3,11 +3,14 @@ use crate::core::runner::RunnerContext;
 use crate::core::session::Session;
 use crate::core::session::{get_default_session_path, load_session};
 use anyhow::{Context, Result};
+use base64::Engine;
+use base64::prelude::BASE64_STANDARD;
 use colored::Colorize;
 
 pub async fn run_agent(
     task: &str,
     _plan: &Option<String>,
+    image: &Option<String>,
     config: &str,
     session: &Option<String>,
     context: &Option<String>,
@@ -15,6 +18,18 @@ pub async fn run_agent(
     println!("\nRunning agent...\n");
     println!("Task: {}", task.to_string().yellow());
     println!("Config: {}", config.to_string().yellow());
+
+    if let Some(image_path) = image {
+        let encoded_image = encode_image(image_path)?;
+        println!(
+            "Image: {} (encoded to {} chars)",
+            image_path.to_string().yellow(),
+            encoded_image.len().to_string().cyan().bold()
+        );
+    } else {
+        println!("Image: None");
+    }
+
     if let Some(s) = session {
         println!("Session: {}", s);
     } else {
@@ -63,7 +78,14 @@ pub async fn run_agent(
         None
     };
 
-    let mut runner_context = RunnerContext::pre_load(&config_body, &session_data, &context)
+    // Encoded the image
+    let image = if let Some(image_path) = image {
+        Some(encode_image(image_path)?)
+    } else {
+        None
+    };
+
+    let mut runner_context = RunnerContext::pre_load(&config_body, &session_data, &context, &image)
         .await
         .with_context(|| anyhow::anyhow!("Failed to preload runner context"))?;
 
@@ -99,4 +121,11 @@ pub async fn read_stdin() -> Option<String> {
     } else {
         Some(buffer)
     }
+}
+
+fn encode_image(image_path: &String) -> Result<String> {
+    let image_data = std::fs::read(image_path)
+        .with_context(|| anyhow::anyhow!("Failed to read image file: {}", image_path))?;
+    let encoded = BASE64_STANDARD.encode(&image_data);
+    Ok(encoded)
 }

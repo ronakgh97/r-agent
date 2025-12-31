@@ -3,7 +3,7 @@ use crate::core::session::Session;
 use crate::core::tools::get_default_toolset;
 use anyhow::Result;
 use my_lib::api::agents::{Agent, AgentBuilder, prompt_with_tools_stream};
-use my_lib::api::dtos::Message;
+use my_lib::api::dtos::{ImageUrl, Message};
 use my_lib::api::request::log_typewriter_effect;
 use std::sync::Arc;
 
@@ -13,6 +13,7 @@ pub struct RunnerContext {
     pub agent_config: Agent,
     pub session: Option<Session>,
     pub context: Option<String>,
+    pub image_encoded: Option<String>,
 }
 
 impl RunnerContext {
@@ -21,6 +22,7 @@ impl RunnerContext {
         agent_config: &str,
         session_data: &Option<Session>,
         context: &Option<String>,
+        image_encoded: &Option<String>,
     ) -> Result<Self> {
         let agent_builder: AgentBuilder = toml::from_str(&agent_config)?;
         let agent_config = agent_builder
@@ -31,6 +33,7 @@ impl RunnerContext {
             agent_config: agent_config.clone(),
             session: session_data.clone(),
             context: context.clone(),
+            image_encoded: image_encoded.clone(),
         })
     }
 
@@ -40,16 +43,45 @@ impl RunnerContext {
 
         // Add context to history if available
         if let Some(ref ctx) = self.context {
-            user_prompt = format!("Context: {}\n\n{}", ctx, user_prompt);
+            user_prompt = format!("Context: {}\n\n User: {}", ctx, user_prompt);
         }
 
-        let history: Vec<Message> = vec![Message {
-            role: my_lib::api::dtos::Role::USER,
-            content: Some(user_prompt),
-            tool_calls: None,
-            tool_call_id: None,
-            name: None,
-        }];
+        // Create Message based on image presence
+        let history: Vec<Message> = match &self.image_encoded {
+            Some(encodings) => {
+                vec![Message {
+                    role: my_lib::api::dtos::Role::USER,
+                    content: None,
+                    multi_content: Some(vec![
+                        my_lib::api::dtos::MultiContent {
+                            r#type: "text".to_string(),
+                            text: Some(user_prompt),
+                            image_url: None,
+                        },
+                        my_lib::api::dtos::MultiContent {
+                            r#type: "image_url".to_string(),
+                            text: None,
+                            image_url: Some(ImageUrl {
+                                url: format!("data:image/jpg;base64,{}", encodings),
+                            }),
+                        },
+                    ]),
+                    tool_calls: None,
+                    tool_call_id: None,
+                    name: None,
+                }]
+            }
+            None => {
+                vec![Message {
+                    role: my_lib::api::dtos::Role::USER,
+                    content: Some(user_prompt),
+                    multi_content: None,
+                    tool_calls: None,
+                    tool_call_id: None,
+                    name: None,
+                }]
+            }
+        };
 
         let stream = prompt_with_tools_stream(self.agent_config.clone(), history.clone()).await?;
 
@@ -67,14 +99,42 @@ impl RunnerContext {
             user_prompt = format!("Context: {}\n\n User: {}", ctx, user_prompt);
         }
 
-        let mut history = session_data.messages.clone();
-        history.push(Message {
-            role: my_lib::api::dtos::Role::USER,
-            content: Some(user_prompt),
-            tool_calls: None,
-            tool_call_id: None,
-            name: None,
-        });
+        // Create Message based on image presence
+        let mut history: Vec<Message> = match &self.image_encoded {
+            Some(encodings) => {
+                vec![Message {
+                    role: my_lib::api::dtos::Role::USER,
+                    content: None,
+                    multi_content: Some(vec![
+                        my_lib::api::dtos::MultiContent {
+                            r#type: "text".to_string(),
+                            text: Some(user_prompt),
+                            image_url: None,
+                        },
+                        my_lib::api::dtos::MultiContent {
+                            r#type: "image_url".to_string(),
+                            text: None,
+                            image_url: Some(ImageUrl {
+                                url: format!("data:image/jpg;base64,,{}", encodings),
+                            }),
+                        },
+                    ]),
+                    tool_calls: None,
+                    tool_call_id: None,
+                    name: None,
+                }]
+            }
+            None => {
+                vec![Message {
+                    role: my_lib::api::dtos::Role::USER,
+                    content: Some(user_prompt),
+                    multi_content: None,
+                    tool_calls: None,
+                    tool_call_id: None,
+                    name: None,
+                }]
+            }
+        };
 
         let stream = prompt_with_tools_stream(self.agent_config.clone(), history.clone()).await?;
 
@@ -82,6 +142,7 @@ impl RunnerContext {
         let agent_message = Message {
             role: my_lib::api::dtos::Role::ASSISTANT,
             content: Some(stream_to_str),
+            multi_content: None,
             tool_calls: None,
             tool_call_id: None,
             name: None,
@@ -128,6 +189,7 @@ pub fn map_message_from(message: &MappedMessage) -> Message {
         MappedMessage::User(content) => Message {
             role: my_lib::api::dtos::Role::USER,
             content: Some(content.clone()),
+            multi_content: None,
             tool_calls: None,
             tool_call_id: None,
             name: None,
@@ -135,6 +197,7 @@ pub fn map_message_from(message: &MappedMessage) -> Message {
         MappedMessage::Agent(content) => Message {
             role: my_lib::api::dtos::Role::ASSISTANT,
             content: Some(content.clone()),
+            multi_content: None,
             tool_calls: None,
             tool_call_id: None,
             name: None,
