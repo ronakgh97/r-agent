@@ -16,7 +16,10 @@ pub fn get_default_toolset() -> ToolRegistry {
     registry.register(RgTool);
     registry.register(PwdTool);
     registry.register(GitDiffTool);
-
+    registry.register(GitStatusTool);
+    registry.register(GitLogTool);
+    registry.register(PsTool);
+    registry.register(TreeTool);
     registry
 }
 
@@ -96,6 +99,93 @@ impl Tool for LsTool {
             _ => {
                 // TODO: fallback to Rust api
                 let err_msg = "Failed to execute list command".to_string();
+                Ok(err_msg)
+            }
+        }
+    }
+}
+
+pub struct TreeTool;
+
+#[async_trait::async_trait]
+impl Tool for TreeTool {
+    fn name(&self) -> &str {
+        "tree_tool"
+    }
+
+    fn description(&self) -> Value {
+        serde_json::json!({
+            "type": "function",
+            "function": {
+                "name": self.name(),
+                "description": "Displays a tree-like structure of files and directories starting from the specified path (defaults to current directory). Useful for visualizing the hierarchy of files and folders.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "path": {
+                            "type": "string",
+                            "description": "The directory path to display the tree from (optional, defaults to current directory)"
+                        }
+                    },
+                    "required": []
+                }
+            }
+        })
+    }
+
+    fn tool_callback(&self) -> bool {
+        true
+    }
+
+    async fn execute_tool(&self, args: Value) -> Result<String> {
+        let path = args["path"]
+            .as_str()
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| {
+                env::current_dir()
+                    .map(|p| p.to_string_lossy().to_string())
+                    .unwrap_or_else(|_| ".".to_string())
+            });
+        #[cfg(target_os = "windows")]
+        let mut cmd = {
+            let mut c = Command::new("powershell");
+            c.arg("tree").arg(&path);
+            c
+        };
+        #[cfg(not(target_os = "windows"))]
+        let mut cmd = {
+            let mut c = Command::new("tree");
+            c.arg(&path);
+            c
+        };
+        let output = cmd
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output()
+            .await;
+
+        match output {
+            Ok(out) if out.status.success() => {
+                let result = String::from_utf8_lossy(&out.stdout).to_string();
+                println!(
+                    "{}",
+                    format!(
+                        "[DEBUG] TreeTool executed\nDisplaying tree for path: {}\n[Returning] \n{}\n",
+                        path, result
+                    )
+                    .dimmed()
+                );
+                Ok(result)
+            }
+            Ok(out) => {
+                let err_msg = String::from_utf8_lossy(&out.stderr).to_string();
+                Ok(format!("Tree command failed: {}", err_msg))
+            }
+            Err(e) => {
+                let err_msg = format!(
+                    "Failed to execute tree command: {}. Make sure 'tree' is installed and in your PATH.",
+                    e
+                );
                 Ok(err_msg)
             }
         }
@@ -273,8 +363,17 @@ impl Tool for PwdTool {
     }
 
     async fn execute_tool(&self, _args: Value) -> Result<String> {
-        let output = Command::new("pwd").output().await?;
-
+        #[cfg(target_os = "windows")]
+        let output = {
+            let mut c = Command::new("powershell");
+            c.arg("pwd");
+            c.output().await?
+        };
+        #[cfg(not(target_os = "windows"))]
+        let cmd = {
+            let mut c = Command::new("pwd");
+            c.output().await?
+        };
         if output.status.success() {
             let result = String::from_utf8_lossy(&output.stdout).to_string();
             println!(
@@ -324,6 +423,147 @@ impl Tool for GitDiffTool {
             println!(
                 "{}",
                 format!("[DEBUG] GitDiffTool executed\n[Returning] \n{}\n", result).dimmed()
+            );
+            Ok(result)
+        } else {
+            let err_msg = String::from_utf8_lossy(&output.stderr).to_string();
+            Ok(err_msg)
+        }
+    }
+}
+
+pub struct GitStatusTool;
+
+#[async_trait::async_trait]
+impl Tool for GitStatusTool {
+    fn name(&self) -> &str {
+        "git_status_tool"
+    }
+
+    fn description(&self) -> Value {
+        serde_json::json!({
+            "type": "function",
+            "function": {
+                "name": self.name(),
+                "description": "Shows git status for the current repository",
+                "parameters": {
+                    "type": "object",
+                    "properties": {},
+                    "required": []
+                }
+            }
+        })
+    }
+    fn tool_callback(&self) -> bool {
+        true
+    }
+    async fn execute_tool(&self, _args: Value) -> Result<String> {
+        let output = Command::new("git").args(["status"]).output().await?;
+
+        if output.status.success() {
+            let result = String::from_utf8_lossy(&output.stdout).to_string();
+            println!(
+                "{}",
+                format!("[DEBUG] GitStatusTool executed\n[Returning] \n{}\n", result).dimmed()
+            );
+            Ok(result)
+        } else {
+            let err_msg = String::from_utf8_lossy(&output.stderr).to_string();
+            Ok(err_msg)
+        }
+    }
+}
+
+pub struct PsTool;
+
+#[async_trait::async_trait]
+impl Tool for PsTool {
+    fn name(&self) -> &str {
+        "process_list_tool"
+    }
+    fn description(&self) -> Value {
+        serde_json::json!({
+            "type": "function",
+            "function": {
+                "name": self.name(),
+                "description": "Lists running processes on the system",
+                "parameters": {
+                    "type": "object",
+                    "properties": {},
+                    "required": []
+                }
+            }
+        })
+    }
+    fn tool_callback(&self) -> bool {
+        true
+    }
+    async fn execute_tool(&self, _args: Value) -> Result<String> {
+        #[cfg(target_os = "windows")]
+        let mut cmd = {
+            let mut c = Command::new("cmd");
+            c.arg("/C").arg("tasklist");
+            c
+        };
+        #[cfg(not(target_os = "windows"))]
+        let cmd = {
+            let mut c = Command::new("ps");
+            c.arg("-aux");
+            c
+        };
+        let output = cmd.output().await?;
+        if output.status.success() {
+            let result = String::from_utf8_lossy(&output.stdout).to_string();
+            println!(
+                "{}",
+                format!("[DEBUG] PsTool executed\n[Returning] \n{}\n", result).dimmed()
+            );
+            Ok(result)
+        } else {
+            let err_msg = String::from_utf8_lossy(&output.stderr).to_string();
+            Ok(err_msg)
+        }
+    }
+}
+
+pub struct GitLogTool;
+
+#[async_trait::async_trait]
+impl Tool for GitLogTool {
+    fn name(&self) -> &str {
+        "git_log_tool"
+    }
+
+    fn description(&self) -> Value {
+        serde_json::json!({
+            "type": "function",
+            "function": {
+                "name": self.name(),
+                "description": "Shows git log for the current repository",
+                "parameters": {
+                    "type": "object",
+                    "properties": {},
+                    "required": []
+                }
+            }
+        })
+    }
+
+    fn tool_callback(&self) -> bool {
+        true
+    }
+
+    async fn execute_tool(&self, _args: Value) -> Result<String> {
+        let output = Command::new("git")
+            .args(["log", "--oneline"])
+            .output()
+            .await?;
+
+        if output.status.success() {
+            let result = String::from_utf8_lossy(&output.stdout).to_string();
+            println!(
+                "{}",
+                format!("[DEBUG] GitLogTool executed\n[Returning] \n{}\n", result).dimmed()
             );
             Ok(result)
         } else {
