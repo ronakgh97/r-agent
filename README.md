@@ -1,7 +1,8 @@
 # R-Agent
 
 R-Agent is an experimental project designed to showcase and test the capabilities of my custom library, `forge`. This
-library is currently under development as part of the [Pokebrains](https://github.com/ronakgh97/Pokebrains) project.
+library was under development as part of the [Pokebrains](https://github.com/ronakgh97/Pokebrains) project, but was
+moved to its own repository [forge](https://github.com/ronakgh97/forge) to allow for independent development and usage.
 
 ## Features
 
